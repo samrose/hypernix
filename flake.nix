@@ -13,71 +13,39 @@
         serverScript = pkgs.writeText "server.exs" ''
           Mix.install([
             {:bandit, "~> 1.0"},
-            {:plug, "~> 1.14"}
+            {:plug, "~> 1.14"},
+            {:francis_htmx, "~> 0.1.0"}
           ])
 
-          defmodule Server do
-            use Plug.Router
+          defmodule Example do
+            use Francis
+            import FrancisHtmx
 
-            plug :match
-            plug Plug.Parsers, 
-              parsers: [:urlencoded],
-              pass: ["*/*"]
-            plug :dispatch
-
-            get "/" do
-              html = """
-              <!DOCTYPE html>
-              <html lang="en">
-              <head>
-                  <meta charset="UTF-8">
-                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                  <title>Hypernix</title>
-                  <script src="https://unpkg.com/htmx.org@2.0.3"></script>
-                  <style>
-                      body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 2rem; }
-                      .counter { font-size: 2rem; margin: 1rem 0; }
-                  </style>
-              </head>
-              <body>
-                  <h1>Hypernix</h1>
-                  <div class="counter">
-                      Count: <span id="count">0</span>
-                  </div>
-                  <form>
-                    <input type="hidden" name="count" value="0"/>
-                    <button hx-post="/increment"
-                            hx-include="[name='count']"
-                            hx-target="#count"
-                            hx-swap="innerHTML"
-                            onclick="this.previousElementSibling.value = document.getElementById('count').innerText">
-                        Increment
-                    </button>
-                  </form>
-              </body>
-              </html>
+            htmx(fn _conn ->
+              assigns = %{}
+              ~E"""
+              <style>
+                .smooth {   transition: all 1s ease-in; font-size: 8rem; }
+              </style>
+              <div hx-get="/colors" hx-trigger="every 1s">
+                <p id="color-demo" class="smooth">Color Swap Demo</p>
+              </div>
               """
-              send_resp(conn, 200, html)
-            end
+            end)
 
-            post "/increment" do
-              IO.inspect(conn.body_params, label: "Body params")
-              count = 
-                case conn.body_params["count"] do
-                  nil -> 0
-                  str -> String.to_integer(str)
-                end
-              new_count = count + 1
-              send_resp(conn, 200, Integer.to_string(new_count))
-            end
+            get("/colors", fn _ ->
+              new_color = 3 |> :crypto.strong_rand_bytes() |> Base.encode16() |> then(&"##{&1}")
+              assigns = %{new_color: new_color}
 
-            match _ do
-              send_resp(conn, 404, "Not found")
-            end
+              ~E"""
+              <p id="color-demo" class="smooth" style="<%= "color:#{@new_color}"%>">
+              Color Swap Demo
+              </p>
+              """
+            end)
           end
-
           IO.puts("Starting server at http://localhost:8000")
-          Bandit.start_link(plug: Server, port: 8000)
+          Bandit.start_link(plug: Example, port: 8000)
           Process.sleep(:infinity)
         '';
         
